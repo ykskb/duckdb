@@ -1,0 +1,71 @@
+# name: test/sql/copy/csv/csv_hive_copy_from.test
+# description: Test copy_from with the automatic parsing of the hive partitioning scheme
+# group: [csv]
+
+statement ok
+create table test_copyfrom (id int, value varchar, date date, part varchar);
+
+# successful copy-from when partition data and csv data matches destination table columns
+statement ok
+copy test_copyfrom from 'data/csv/hive-partitioning/simple/*/*/test.csv';
+
+query IIII
+select * from test_copyfrom;
+----
+1	value1	2012-01-01	a
+2	value2	2013-01-01	b
+
+statement ok
+delete from test_copyfrom;
+
+statement ok
+copy test_copyfrom from 'data/csv/hive-partitioning/different_order/*/*/test.csv';
+
+query IIII
+select * from test_copyfrom;
+----
+1	value1	2012-01-01	a
+2	value2	2013-01-01	b
+
+statement ok
+delete from test_copyfrom;
+
+# partition data casting (INT partition data into VARCHAR in table)
+statement ok
+copy test_copyfrom from 'data/csv/hive-partitioning/types/**/test.csv';
+
+query IIII
+select * from test_copyfrom;
+----
+1	value1	2012-01-01	1000
+2	value2	2013-01-01	9000
+
+# impossible partition data cast (VARCHAR in partition to INT in table)
+statement ok
+create table test_copyfrom_int_part (id int, value varchar, date date, part int);
+
+statement error
+copy test_copyfrom_int_part from 'data/csv/hive-partitioning/simple/*/*/test.csv';
+----
+Invalid Input Error: Unable to cast 'a' (from hive partition column 'PART') to: 'INTEGER'
+
+# insufficient column inputs due to csv header mismatch 
+statement error
+copy test_copyfrom from 'data/csv/hive-partitioning/mismatching_contents/*/test.csv';
+----
+CSV options could not be auto-detected. Consider setting parser options manually.
+
+# insufficient column inputs due to mismatching partition keys  
+statement error
+copy test_copyfrom from 'data/csv/hive-partitioning/mismatching_names/**/test.csv';
+----
+CSV options could not be auto-detected. Consider setting parser options manually.
+
+# sniffer detects mismatching types in csv data  
+statement ok
+create table test_copyfrom2 (a int, b varchar, part varchar);
+
+statement error
+copy test_copyfrom2 from 'data/csv/hive-partitioning/mismatching_types/**/test.csv';
+----
+Error when converting column "a". Could not convert string "xxx" to 'INTEGER'

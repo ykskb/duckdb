@@ -216,13 +216,12 @@ static unique_ptr<FunctionData> WriteCSVBind(ClientContext &context, CopyFunctio
 static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, CopyInfo &info, vector<string> &expected_names,
                                             vector<LogicalType> &expected_types) {
 	auto bind_data = make_uniq<ReadCSVData>();
-	bind_data->csv_types = expected_types;
-	bind_data->csv_names = expected_names;
 	bind_data->return_types = expected_types;
 	bind_data->return_names = expected_names;
 
 	auto multi_file_reader = MultiFileReader::CreateDefault("CSVCopy");
-	bind_data->files = multi_file_reader->CreateFileList(context, Value(info.file_path))->GetAllFiles();
+	auto multi_file_list = multi_file_reader->CreateFileList(context, Value(info.file_path));
+	bind_data->files = multi_file_list->GetAllFiles();
 
 	auto &options = bind_data->options;
 
@@ -244,11 +243,41 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, CopyInfo &in
 		options_map[option.first] = ConvertVectorToValue(std::move(option.second));
 	}
 	options.file_path = bind_data->files[0];
-	options.name_list = expected_names;
-	options.sql_type_list = expected_types;
 	options.columns_set = true;
-	for (idx_t i = 0; i < expected_types.size(); i++) {
-		options.sql_types_per_column[expected_names[i]] = i;
+
+	if (options.auto_detect) {
+		options.file_options.AutoDetectHivePartitioning(*multi_file_list, context);
+	}
+
+	if (options.file_options.hive_partitioning) {
+		multi_file_reader->BindOptions(options.file_options, *multi_file_list, bind_data->return_types,
+		                               bind_data->return_names, bind_data->reader_bind);
+		vector<string> csv_names;
+		vector<LogicalType> csv_types;
+		for (id_t i = 0; i < expected_types.size(); i++) {
+			auto schema = options.file_options.hive_types_schema.find(expected_names[i]);
+			if (schema != options.file_options.hive_types_schema.end()) {
+				// set expected type on partition
+				schema->second = expected_types[i];
+			} else {
+				// append non-partition column for check with sniffer
+				csv_names.emplace_back(expected_names[i]);
+				csv_types.emplace_back(expected_types[i]);
+			}
+		}
+		bind_data->csv_names = csv_names;
+		bind_data->csv_types = csv_types;
+		options.name_list = csv_names;
+		options.sql_type_list = csv_types;
+	} else {
+		bind_data->csv_types = expected_types;
+		bind_data->csv_names = expected_names;
+		options.name_list = expected_names;
+		options.sql_type_list = expected_types;
+	}
+
+	for (idx_t i = 0; i < bind_data->csv_types.size(); i++) {
+		options.sql_types_per_column[bind_data->csv_names[i]] = i;
 	}
 
 	if (options.auto_detect) {
