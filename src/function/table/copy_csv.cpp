@@ -249,15 +249,20 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, CopyInfo &in
 		options.file_options.AutoDetectHivePartitioning(*multi_file_list, context);
 	}
 
-	if (options.file_options.hive_partitioning) {
+	if (!options.file_options.hive_partitioning) {
+		bind_data->csv_types = expected_types;
+		bind_data->csv_names = expected_names;
+		options.name_list = expected_names;
+		options.sql_type_list = expected_types;
+	} else {
 		multi_file_reader->BindOptions(options.file_options, *multi_file_list, bind_data->return_types,
 		                               bind_data->return_names, bind_data->reader_bind);
 		vector<string> csv_names;
 		vector<LogicalType> csv_types;
-		for (id_t i = 0; i < expected_types.size(); i++) {
+		for (idx_t i = 0; i < expected_types.size(); i++) {
 			auto schema = options.file_options.hive_types_schema.find(expected_names[i]);
 			if (schema != options.file_options.hive_types_schema.end()) {
-				// set expected type on partition
+				// set expected type on partition schema
 				schema->second = expected_types[i];
 			} else {
 				// append non-partition column for check with sniffer
@@ -269,11 +274,6 @@ static unique_ptr<FunctionData> ReadCSVBind(ClientContext &context, CopyInfo &in
 		bind_data->csv_types = csv_types;
 		options.name_list = csv_names;
 		options.sql_type_list = csv_types;
-	} else {
-		bind_data->csv_types = expected_types;
-		bind_data->csv_names = expected_names;
-		options.name_list = expected_names;
-		options.sql_type_list = expected_types;
 	}
 
 	for (idx_t i = 0; i < bind_data->csv_types.size(); i++) {
