@@ -53,13 +53,13 @@ Invalid Input Error: Unable to cast 'a' (from hive partition column 'PART') to: 
 statement error
 copy test_copyfrom from 'data/csv/hive-partitioning/mismatching_contents/*/test.csv';
 ----
-CSV options could not be auto-detected. Consider setting parser options manually.
+It was not possible to automatically detect the CSV Parsing dialect
 
 # insufficient column inputs due to mismatching partition keys  
 statement error
 copy test_copyfrom from 'data/csv/hive-partitioning/mismatching_names/**/test.csv';
 ----
-CSV options could not be auto-detected. Consider setting parser options manually.
+It was not possible to automatically detect the CSV Parsing dialect
 
 # sniffer detects mismatching types in csv data  
 statement ok
